@@ -36,10 +36,12 @@ while True:
     except socket.error as e:
         print(f"Erro de conexão: {e}")
     
-    # Pergunta ao usuário se deseja continuar solicitando arquivos
+    # Pergunta ao usuário se deseja continuar solicitando arquivos. Caso não queira, é enviado uma mensagem ao servidor indicando o encerramento da conexão
     continuar = input("Deseja solicitar outro arquivo? (s/n): ").lower()
     if continuar != 's':
-        break
+      encerramento = 'exit'
+      sock.sendto(encerramento.encode('utf-8'), (SERVER, PORT))  
+      break
 
 sock.close()
 print("Conexão encerrada.")

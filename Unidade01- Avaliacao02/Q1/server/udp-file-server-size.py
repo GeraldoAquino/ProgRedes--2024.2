@@ -7,13 +7,21 @@ PORT = 12345
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((INTERFACE, PORT))
 
-print("Escutando em ...", (INTERFACE, PORT))
+print("Servidor escutando em ...", (INTERFACE, PORT))
 
 while True:
     try:
         # Recebe o nome do arquivo
         data, source = sock.recvfrom(4096)
         fileName = data.decode('utf-8')
+        
+        # Retorna ao estado de escutar novas conexões, após o cliente encerrar a conexão
+        if fileName == 'exit':
+            print(f"Cliente {source} encerrou a conexão.")
+            print("Servidor escutando em ...", (INTERFACE, PORT))
+            continue
+        
+        
         print(f"Recebi pedido para o arquivo {fileName} de {source}")
         caminho = DIRBASE + fileName
 
