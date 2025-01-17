@@ -31,7 +31,7 @@ while continuar:
     print("+--------------------------------------------------------+")
     print("| 2 - Download de arquivo                                |")
     print("+--------------------------------------------------------+")
-    print("| 3 - Download de múltiplos arquivos atravez da mascara  |")
+    print("| 3 - Download de múltiplos arquivos atraves da mascara  |")
     print("+--------------------------------------------------------+")
     print("| 4 - Calcular o hash de um arquivo                      |")
     print("+--------------------------------------------------------+")
@@ -148,55 +148,55 @@ while continuar:
         resposta = sock.recv(4096).decode('utf-8')
         print(resposta)
 
+
     elif opcao == "5":
         sock.send("cget".encode('utf-8'))
         fileName = input("\nDigite o nome do arquivo: ")
 
-        # Verifica se o arquivo está dentro da pasta 'files' usando a função segura
+        # Caminho seguro
         localFilePath = caminhoCerto(fileName)
         if localFilePath is None:
             print("Erro: O arquivo solicitado está fora da pasta 'files'.")
             continue
 
-        if not os.path.exists(localFilePath):
-            print("Arquivo local não encontrado para continuar o download.")
-            continue
-
-        localSize = os.path.getsize(localFilePath)
+        # Verifica se o arquivo existe localmente
+        localSize = os.path.getsize(localFilePath) if os.path.exists(localFilePath) else 0
         sock.send(fileName.encode('utf-8'))
         sock.send(str(localSize).encode('utf-8'))
 
-        with open(localFilePath, 'rb') as file:
-            data = file.read(localSize)
-            localHash = hashlib.sha1(data).hexdigest()
-            sock.send(localHash.encode('utf-8'))
+        # Calcula hash da parte local e envia
+        if localSize > 0:
+            with open(localFilePath, 'rb') as file:
+                localData = file.read(localSize)
+                localHash = hashlib.sha1(localData).hexdigest()
+                sock.send(localHash.encode('utf-8'))
+        else:
+            sock.send("NO_HASH".encode('utf-8'))  # Indica que o arquivo ainda não existe localmente
 
-        # Aqui vamos tentar receber uma resposta binária e verificar a resposta do servidor
-        serverResponse = sock.recv(4096)
-
-        if serverResponse.decode('utf-8', errors='ignore') == "HASH OK":
-            # Recebe o tamanho total do arquivo
-            totalSizeData = sock.recv(8)
-            totalSize = int.from_bytes(totalSizeData, 'big')
-
-            # Calcula os bytes restantes
+        # Recebe validação do servidor
+        serverResponse = sock.recv(4096).decode('utf-8')
+        if serverResponse.startswith("HASH OK"):
+            print("Hash validado. Continuando o download...")
+            totalSize = int(serverResponse.split(":")[1])
             bytesToReceive = totalSize - localSize
-            print(f"Tamanho total do arquivo: {totalSize} bytes.")
-            print(f"Baixando os últimos {bytesToReceive} bytes...")
 
             with open(localFilePath, 'ab') as file:
-                blocos_recebidos = 0
-                while blocos_recebidos < bytesToReceive:
-                    chunk = sock.recv(4096)
+                while bytesToReceive > 0:
+                    chunk = sock.recv(min(4096, bytesToReceive))
                     if not chunk:
                         break
                     file.write(chunk)
-                    blocos_recebidos += len(chunk)
-                    print(f"Recebido {localSize + blocos_recebidos}/{totalSize} bytes", end="\r")
+                    bytesToReceive -= len(chunk)
 
-            print("\nDownload continuado com sucesso!")
+            print("\nDownload completado com sucesso!")
+        elif serverResponse == "HASH MISMATCH":
+            print("\nErro: Hash local não corresponde ao servidor. Download interrompido.")
+        elif serverResponse == "FILE NOT FOUND":
+            print("\nErro: Arquivo não encontrado no servidor.")
         else:
-            print("\nErro: Hash não corresponde. Verifique o arquivo local.")
+            print(f"\nErro desconhecido: {serverResponse}")
+
+
 
     elif opcao == "6":
         break

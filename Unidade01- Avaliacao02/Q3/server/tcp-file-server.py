@@ -143,7 +143,7 @@ while True:
                                 connection.send(b'\x00\x01')  # Erro
 
                 # Verifica se o pedido é um hash, então calcula o hash de um arquivo
-                if request.lower() == "hash":
+                elif request.lower() == "hash":
                     # Recebe o nome do arquivo e o número de bytes do cliente
                     fileName = connection.recv(4096).decode('utf-8')
                     numBytes = connection.recv(4096).decode('utf-8')
@@ -186,50 +186,55 @@ while True:
                         clientSize = int(connection.recv(4096).decode('utf-8'))
                         clientHash = connection.recv(4096).decode('utf-8')
 
-                        filePath = DIRBASE + fileName
+                        filePath = os.path.join(DIRBASE, fileName)
 
                         # Verificação de segurança
                         if not os.path.realpath(filePath).startswith(os.path.realpath(DIRBASE)):
-                            connection.send("Erro: Tentativa de acesso a diretório inválido.")
+                            connection.send("Erro: Tentativa de acesso a diretório inválido.".encode('utf-8'))
+                            print(f"Cliente {source} tentou acessar um arquivo fora da pasta permitida.")
                             continue
 
-                        if not os.path.isfile(filePath):
-                            connection.send("Erro: Arquivo não encontrado.".encode('utf-8'))
+                        if not os.path.exists(filePath):
+                            connection.send("FILE NOT FOUND".encode('utf-8'))
                             continue
 
-                        with open(filePath, 'rb') as file:
-                            # Envia o tamanho total do arquivo
-                            file.seek(0, 2)  # Vai para o final do arquivo
-                            fileSize = file.tell()
-                            connection.send(fileSize.to_bytes(8, 'big'))
-
-                            # Verifica o hash do cliente
-                            file.seek(0)
-                            serverData = file.read(clientSize)
-                            serverHash = hashlib.sha1(serverData).hexdigest()
-
-                        if serverHash == clientHash:
-                            connection.send(b"HASH OK")
+                        # Verifica se o hash corresponde
+                        if clientSize > 0:
                             with open(filePath, 'rb') as file:
-                                file.seek(clientSize)
-                                while True:
-                                    chunk = file.read(4096)
-                                    if not chunk:
-                                        break
-                                    connection.send(chunk)
-                            print(f"Arquivo {fileName} enviado com sucesso para {source}.")
-                        else:
-                            connection.send(b"HASH ERROR")
-                    except Exception as e:
-                        print(f"Erro: {e}")
-                        break
+                                data = file.read(clientSize)
+                                serverHash = hashlib.sha1(data).hexdigest()
 
+                            if serverHash != clientHash:
+                                connection.send("HASH MISMATCH".encode('utf-8'))
+                                continue
+
+                        # Se o hash for válido ou o arquivo for novo
+                        totalSize = os.path.getsize(filePath)
+                        connection.send(f"HASH OK:{totalSize}".encode('utf-8'))
+
+                        # Inicia o envio dos bytes restantes
+                        with open(filePath, 'rb') as file:
+                            file.seek(clientSize)
+                            bytesToSend = totalSize - clientSize
+
+                            while bytesToSend > 0:
+                                chunk = file.read(min(4096, bytesToSend))
+                                if not chunk:
+                                    break
+                                connection.send(chunk)
+                                bytesToSend -= len(chunk)
+
+                        print(f"Arquivo {fileName} enviado parcialmente com sucesso para {source}.")
+
+                    except Exception as e:
+                        erro = f"Erro na funcionalidade cget: {e}"
+                        connection.send(erro.encode('utf-8'))
+                        print(erro)
 
 
             except Exception as e:
-                print(f"Erro ao processar pedido do cliente: {e}")
-                break
-
+                        print(f"Erro: {e}")
+                        connection.send(f"Erro: {e}".encode('utf-8'))
         connection.close()
         print(f"Conexão com {source} encerrada.\n")
     except Exception as e:
